@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Location Sharing</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --secondary: #f43f5e;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            color: var(--primary);
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: var(--dark);
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            outline: rgb(0, 0, 0) dotted 3px;
+            outline-offset: 1px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 1rem;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e11d48;
+        }
+        
+        #link-container {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        #share-link {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        
+        #map {
+            height: 400px;
+            border-radius: 8px;
+            margin-top: 1rem;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .consent-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--dark);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            z-index: 1000;
+        }
+        
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary);
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .location-info {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #e2e8f0;
+            border-radius: 8px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Secure Location Sharing</h1>
+            <p class="subtitle">Share your location safely and with consent</p>
+        </header>
+        
+        <div class="card" id="link-generator">
+            <h2>Generate Shareable Link</h2>
+            <p>Create a unique link that will ask the recipient for permission to share their location with you.</p>
+            <button id="generate-btn" class="btn btn-primary">Generate Link</button>
+            
+            <div id="link-section" class="hidden">
+                <p>Share this link with the person whose location you want to request (they must grant permission):</p>
+                <div id="link-container">
+                    <input type="text" id="share-link" readonly>
+                    <button id="copy-btn" class="btn btn-secondary">Copy</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" id="location-viewer">
+            <h2>Location Viewer</h2>
+            <div id="no-location">
+                <p>No location has been shared yet. When someone shares their location using your link, it will appear here.</p>
+            </div>
+            <div id="location-container" class="hidden">
+                <div id="map"></div>
+                <div class="location-info">
+                    <p><strong>Shared at:</strong> <span id="timestamp"></span></p>
+                    <p><strong>Coordinates:</strong> <span id="coordinates"></span></p>
+                    <p><strong>Address:</strong> <span id="address">Loading...</span></p>
+                </div>
+            </div>
+            <div id="loading" class="hidden">
+                <div class="loading-spinner"></div>
+                <p>Loading location...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="consent-banner hidden" id="consent-banner">
+        <p>This website requests your location to share with the link creator. Your location will only be shared if you approve this request.</p>
+        <div style="margin-top: 1rem;">
+            <button id="consent-btn" class="btn btn-primary" style="margin-right: 1rem;">Share Location</button>
+            <button id="deny-btn" class="btn btn-secondary">Deny</button>
+        </div>
+    </div>
+    
+    <footer>
+        <p>This service securely shares location data only with explicit user consent.</p>
+    </footer>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+    // 1. Khai báo cấu hình Firebase
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCBbz5_ujYKriCxzse77udtaZM7xKXqXt4",
+  authDomain: "nguynnn-c1fd0.firebaseapp.com",
+  databaseURL: "https://nguynnn-c1fd0-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "nguynnn-c1fd0",
+  storageBucket: "nguynnn-c1fd0.firebasestorage.app",
+  messagingSenderId: "127301244328",
+  appId: "1:127301244328:web:e5c1724bfa4a740004799d",
+  measurementId: "G-F4LCFYHL36"
+};
+
+    // 2. Khởi tạo Firebase App và Database
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+</script>
+
+    <script>
+        // Generate a unique ID for this session
+        const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        let map = null;
+        let mapMarker = null;
+        
+        // Check if this is a location sharing request (URL has ?tracking_id parameter)
+        const urlParams = new URLSearchParams(window.location.search);
+        const trackingId = urlParams.get('tracking_id');
+        
+        // DOM elements
+        const linkGeneratorCard = document.getElementById('link-generator');
+        const generateBtn = document.getElementById('generate-btn');
+        const linkSection = document.getElementById('link-section');
+        const shareLink = document.getElementById('share-link');
+        const copyBtn = document.getElementById('copy-btn');
+        const noLocation = document.getElementById('no-location');
+        const locationContainer = document.getElementById('location-container');
+        const loading = document.getElementById('loading');
+        const consentBanner = document.getElementById('consent-banner');
+        const consentBtn = document.getElementById('consent-btn');
+        const denyBtn = document.getElementById('deny-btn');
+        const timestampEl = document.getElementById('timestamp');
+        const coordinatesEl = document.getElementById('coordinates');
+        const addressEl = document.getElementById('address');
+        
+        // Event listeners
+        generateBtn.addEventListener('click', generateShareableLink);
+        copyBtn.addEventListener('click', copyLinkToClipboard);
+        
+        if (trackingId) {
+            // This page was opened with a tracking ID - show consent banner
+            linkGeneratorCard.classList.add('hidden');
+            consentBanner.classList.remove('hidden');
+            
+            // Set up consent buttons
+            consentBtn.addEventListener('click', () => {
+                consentBanner.classList.add('hidden');
+                loading.classList.remove('hidden');
+                requestLocation(trackingId);
+            });
+            
+            denyBtn.addEventListener('click', () => {
+                consentBanner.classList.add('hidden');
+                alert('Location sharing was denied. No location data has been shared.');
+            });
+        } else {
+            // Regular page view - check for any existing location data in the URL
+            checkForLocationData();
+        }
+        
+        function generateShareableLink() {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('tracking_id', sessionId);
+            
+            shareLink.value = currentUrl.toString();
+            linkSection.classList.remove('hidden');
+            
+            // Scroll to the link section
+            linkSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function copyLinkToClipboard() {
+            shareLink.select();
+            document.execCommand('copy');
+            
+            // Change button text temporarily
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+        
+        function requestLocation(trackingId) {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser");
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // Success callback
+                    const { latitude, longitude } = position.coords;
+                    const timestamp = new Date(position.timestamp);
+                    
+                    // In a real app, you would send this to a server
+                    // For this demo, we'll store it in the URL
+                    db.ref('locations/' + trackingId).set({
+    lat: latitude,
+    lng: longitude,
+    timestamp: timestamp.getTime()
+}).then(() => {
+    alert('Your location has been shared. You can now close this window.');
+});
+
+                    
+                    // Normally you would redirect to this URL
+                    // For demo purposes we'll show it
+                    showLocationOnMap(latitude, longitude, timestamp);
+                    
+                    // Show a message that location was shared
+                    alert('Your location has been shared. You can now close this window.');
+                },
+                (error) => {
+                    // Error callback
+                    console.error("Error getting location:", error);
+                    alert("Error getting location: " + error.message);
+                    loading.classList.add('hidden');
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+        
+        function checkForLocationData() {
+            if (!trackingId) return;
+
+db.ref('locations/' + trackingId).on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data && data.lat && data.lng) {
+        const timestamp = new Date(data.timestamp);
+        showLocationOnMap(data.lat, data.lng, timestamp);
+    }
+});
+
+        }
+        
+        function showLocationOnMap(latitude, longitude, timestamp) {
+            loading.classList.add('hidden');
+            noLocation.classList.add('hidden');
+            locationContainer.classList.remove('hidden');
+            
+            // Format and display timestamp
+            timestampEl.textContent = timestamp.toLocaleString();
+            
+            // Display coordinates
+            coordinatesEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            
+            // Initialize map if not already done
+            if (!map) {
+                map = L.map('map').setView([latitude, longitude], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+            } else {
+                map.setView([latitude, longitude], 15);
+            }
+            
+            // Add or update marker
+            if (mapMarker) {
+                mapMarker.setLatLng([latitude, longitude]);
+            } else {
+                mapMarker = L.marker([latitude, longitude]).addTo(map)
+                    .bindPopup('Shared location');
+            }
+            
+            // Reverse geocode to get address (using Nominatim)
+            getAddressFromCoordinates(latitude, longitude);
+        }
+        
+        function getAddressFromCoordinates(lat, lng) {
+            // Using Nominatim for reverse geocoding
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.display_name) {
+                        addressEl.textContent = data.display_name;
+                    } else {
+                        addressEl.textContent = "Address not found";
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching address:", error);
+                    addressEl.textContent = "Error loading address";
+                });
+        }
+    </script>
+</body>
+</html>  
